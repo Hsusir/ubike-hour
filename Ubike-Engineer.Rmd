@@ -1,0 +1,308 @@
+---
+title: "用 Ubike的Open-Data學資料整形"
+author: "許sir"
+---
+
+## [設定所需的函式庫(libraries)]！
+```{}
+install.packages("jsonlite")
+install.packages("magrittr")
+install.packages("dplyr")
+install.packages("reshape2")
+```
+
+
+```{r echo=FALSE,warning=FALSE,message=F}
+# 將套件載入
+library(jsonlite)
+library(magrittr)
+library(dplyr)
+library(reshape2)
+```
+
+## Ch01 Read JSON data in R
+
+- 什麼是 JSON data？
+- JSON = JavaScriptObjectNotation
+- JSON 是網路上非常廣泛被使用的資料格式之一，尤其在各種傳遞資料的API中
+- 敘述：
+    + eg. 臺北市的 Youbike API 資料、Facebook 上的 API 資料
+    +  API是什麼？ https://zh.wikipedia.org/wiki/%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E6%8E%A5%E5%8F%A3
+    
+  
+    
+```{}
+請先於下方 Console 輸入：vignette("json-aaquickstart", "jsonlite")
+- 什麼是 vignette ? Ans：學習套件的起手式！
+- 這時檔案系統區應該會開啟一個 html 的網頁，此為幫助我們上手 jsonlite 物件的祕笈！
+- 基本款：使用 jsonlite 套件提供的 toJSON 和 fromJSON 即可在不損失任何資訊下在 R 與 JSON data 間進行轉換
+```
+
+
+
+```{r}
+# 設定我們檔案存放的路徑
+setwd("/media/hsusir/DATA/Rdata Practice/02DataEngineer/ubike-hour") 
+
+url = "http://data.taipei/youbike"
+youbike_data <- fromJSON(url, "YouBikeTP.gz") #本範例取樣時間為2016/10/24
+
+```
+
+### 由於讀入後R會將檔案存成list格式，故我們要先將list格式變成charactor vector
+```{r}
+
+youbike_chr <- unlist(youbike_data)
+head(youbike_chr)
+```
+
+### 將matrix轉為dataframe格式
+```{r}
+# 將每一個charactor填入matrix中，matrix為矩陣的意思
+# byrow = T的意思是將資料依列擺入，ncol為行數，其餘參數怎麼用？請自行輸入：?matrix
+youbike_mat <- matrix(youbike_chr, byrow = T, ncol = 14)
+
+# 將matrix轉為dataframe格式
+youbike <- data.frame(youbike_mat, stringsAsFactors = F)
+
+# 輸入youbike行的變數名稱
+colnames(youbike) <- c("act","sno","sna","tot","sbi","sarea","mday","lat","lng","ar","sareaen","snaen","aren","bemp")
+
+# 取前六筆看看
+head(youbike)
+
+# 取後六筆看看
+tail(youbike)
+```
+
+```{r}
+# 發現最後一列跑掉，將最後一列去掉
+youbike <- youbike[-nrow(youbike),]
+
+# 再檢查一次最後三筆資料
+tail(youbike)
+```
+
+
+## CH02-1 Data-Manipulation：magrittr
+```{}
+用好工具先來養成好習慣：Pipeline
+壓縮的程式碼不易讀且複雜
+展開的程式碼好讀但是太冗長，而且產生過多暫存變數
+magrittr 套件聽到大家的聲音了！
+
+養成 Pipeline Style 的 coding 習慣，上述問題迎刃而解！
+```
+
+```{r}
+# 舊方法
+temp1 <- youbike$sarea
+temp1 <- as.character(temp1)
+counts <- table(temp1)
+counts
+```
+
+```{r}
+# Pipeline
+youbike$sarea %>% 
+  as.character() %>% 
+  table()
+```
+
+## CH02-2 Data-Manipulation：dplyr
+```{}
+R 界的資料首席外科醫師：dplyr
+- Hadley Wickham 和 Romain Francois 在2014年上架的一個套件
+- 提供許多直觀的函數讓 R user 在資料整理上更便利
+- 可以結合 magrittr 套件中的 Pipeline！
+- 針對 data.frame 做設計的套件
+- 處理效能被 Romain 利用 C++ 優化過
+- 能與 SQL 語法以及 Excel 的樞紐分析表互相對應
+```
+
+```{}
+必先利其器：整形醫材簡介
+- select：對欄進行篩選
+- filter：對列進行條件篩選
+- slice：對列進行篩選
+- mutate：更改欄位或新增欄位
+- group_by + summarise：依照類別進行彙整
+- arrange：排序
+- bind_rows, bind_cols：合併列、合併行
+- join family：
+ + mutating join：left_join, right_join, inner_join, full_join
+- intersect, union, setdiff
+
+```
+
+```{r}
+# 讀入youbike檔案
+data_ubike <- read.csv("ubike-hour-201502-utf8.csv",
+                  header = T,
+                  sep = ",",
+                  stringsAsFactors = F,
+                  fileEncoding = "UTF-8")
+```
+
+```{r}
+# 看看資料結構
+str(data_ubike)
+```
+
+
+**Youbike 資料欄位說明**
+```{}
+ 英文欄位名稱     中文欄位名稱    
+          date         日期  
+          hour         時間       
+           sno     場站代號       
+         sarea     場站區域       
+           sna     場站名稱       
+           lat         緯度           
+           lng         經度       
+           tot     總停車格       
+       avg.sbi   平均車輛數       
+        max.sbi   最大車輛數       
+        min.sbi   最小車輛數 
+      std.sbi   車輛數標準差
+    avg.bemp     平均空位數
+    max.bemp     最大空位數
+    min.bemp     最小空位數
+    std.bemp   空位數標準差
+        temp       平均氣溫
+    humidity           濕度
+    pressure           氣壓
+    max.anemo       最大風速
+    rainfull         降雨量
+
+```
+
+  
+
+### [EXAM 1].畢業後想在信義區附近租房子，大安區上班，希望以後上下班可以靠 ubike 通勤，故希望每天早上7:00左右與下午19:00左右都可以輕鬆的租借到ubike
+- 找出信義區早上7:00與大安區下午19:00腳踏車最多的場站
+- 找出大安區早上8:00與信義區下午20:00空位數最多的場站
+
+### [ANS 1].
+- 首先，我們會利用 select 挑選出需要的欄位
+```{r}
+# 挑出時間、場站區域、場站名稱、平均車輛數
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  head()
+```
+
+- 再來，我們要篩選出信義區早上7:00與大安區下午19:00的資料
+```{r}
+# 篩選出信義區早上7:00與大安區下午19:00的資料
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "信義區" & hour == 7)
+
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "大安區" & hour == 19)
+```
+
+- 把剛剛的資料擷取前面六筆看看吧！
+```{r}
+# 擷取信義區早上7:00的資料前六筆
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "信義區" & hour == 7) %>% 
+  slice(1:6)
+```
+
+- 將平均車輛數無條件捨去至個位數，直接更新原始欄位
+```{r}
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "信義區" & hour == 7) %>% 
+  mutate(avg.sbi = floor(avg.sbi))
+
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "大安區" & hour == 19) %>% 
+  mutate(avg.sbi = floor(avg.sbi))
+```
+
+- **1. 計算信義區早上7:00各站點的平均車輛數**
+```{r}
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "信義區" & hour == 7) %>% 
+  mutate(avg.sbi = floor(avg.sbi)) %>% 
+  group_by(hour, sarea, sna) %>% 
+  summarise(avg = mean(avg.sbi, na.rm = T) %>% round())
+```
+
+- **2.計算大安區晚上19:00各站點的平均車輛數**
+```{r}
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "大安區" & hour == 19) %>% 
+  mutate(avg.sbi = floor(avg.sbi)) %>% 
+  group_by(hour, sarea, sna) %>% 
+  summarise(avg = mean(avg.sbi, na.rm = T) %>% round())
+```
+
+- **將平均車輛數由大到小排序，看看哪個站點的車子最多吧！**
+```{r}
+# 信義區
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "信義區" & hour == 7) %>% 
+  mutate(avg.sbi = floor(avg.sbi)) %>% 
+  group_by(hour, sarea, sna) %>% 
+  summarise(avg = mean(avg.sbi, na.rm = T) %>% round()) %>% 
+  arrange(avg %>% desc())
+  
+# 大安區
+data_ubike %>% 
+  select(hour, sarea, sna, avg.sbi) %>% 
+  filter(sarea == "大安區" & hour == 19) %>% 
+  mutate(avg.sbi = floor(avg.sbi)) %>% 
+  group_by(hour, sarea, sna) %>% 
+  summarise(avg = mean(avg.sbi, na.rm = T) %>% round()) %>% 
+  arrange(avg %>% desc())
+```
+
+### [EXAM 2].許多朋友會在晚上的時間後租借 ubike 騎腳踏車運動，但是騎車最怕碰到下雨，所以 想要了解晚上溼度的高低是否會與民眾租借ubike的意願有關聯性？
+
+- 例如：溼度高可能意味者降雨機率也高，會不會使得民眾使用ubike的意願降低？
+–> 觀察濕度與平均空位數的相關係數
+
+```{r}
+# 挑選欄位：時間、平均空位數、濕度
+# 篩選時間介於18:00-24:00間的資料
+# 將平均空位數欄位無條件捨去到個位數後，將新資料表assign至新變數中
+
+data_ubike %>% 
+  select(hour, avg.bemp, humidity) %>% 
+  filter(hour <= 24 & hour >= 18) %>% 
+  mutate(avg.bemp = floor(avg.bemp)) -> data_ubike_part2
+
+# 觀察平均空位數與濕度間的相關係數
+cor(data_ubike_part2$avg.bemp, data_ubike_part2$humidity)
+```
+
+## CH02-3 Data-Manipulation：reshape2
+
+- melt：寬資料轉換為長資料
+
+```{r}
+#直接Demo一下！
+data("WorldPhones")
+WP <- as.data.frame(WorldPhones)
+WP$year <- rownames(WP)  
+WP.melt <- melt(WP, id.var = 'year')
+```
+
+- cast：長資料轉換為寬資料
+```{r}
+#直接Demo一下！
+WP.cast <- dcast(WP.melt, year ~ variable, value.var="value")
+head(WP.melt)
+head(WP.cast)
+```
+
